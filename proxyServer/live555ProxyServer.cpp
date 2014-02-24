@@ -13,7 +13,7 @@ You should have received a copy of the GNU Lesser General Public License
 along with this library; if not, write to the Free Software Foundation, Inc.,
 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301  USA
 **********/
-// Copyright (c) 1996-2013, Live Networks, Inc.  All rights reserved
+// Copyright (c) 1996-2014, Live Networks, Inc.  All rights reserved
 // LIVE555 Proxy Server
 // main program
 
@@ -189,6 +189,7 @@ int main(int argc, char** argv) {
   // Create the RTSP server.  Try first with the default port number (554),
   // and then with the alternative port number (8554):
   RTSPServer* rtspServer;
+  portNumBits rtspServerPortNum = 554;
   rtspServer = createRTSPServer(rtspServerPortNum);
   if (rtspServer == NULL) {
     *env << "Failed to create RTSP server: " << env->getResultMsg() << "\n";

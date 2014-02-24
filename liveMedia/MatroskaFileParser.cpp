@@ -14,7 +14,7 @@ along with this library; if not, write to the Free Software Foundation, Inc.,
 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301  USA
 **********/
 // "liveMedia"
-// Copyright (c) 1996-2013 Live Networks, Inc.  All rights reserved.
+// Copyright (c) 1996-2014 Live Networks, Inc.  All rights reserved.
 // A parser for a Matroska file.
 // Implementation
 
@@ -100,7 +100,7 @@ void MatroskaFileParser::continueParsing() {
     }
   }
 
-  // We successfully parsed the file's 'Track' headers.  Call our 'done' function now:
+  // We successfully parsed the file.  Call our 'done' function now:
   if (fOnEndFunc != NULL) (*fOnEndFunc)(fOnEndClientData);
 }
 
@@ -433,6 +433,27 @@ Boolean MatroskaFileParser::parseTrack() {
 #endif
 	  if (track != NULL) {
 	    delete[] track->codecID; track->codecID = codecID;
+
+	    // Also set the track's "mimeType" field, if we can deduce it from the "codecID":
+	    if (strncmp(codecID, "A_MPEG", 6) == 0) {
+	      track->mimeType = "audio/MPEG";
+	    } else if (strncmp(codecID, "A_AAC", 5) == 0) {
+	      track->mimeType = "audio/AAC";
+	    } else if (strncmp(codecID, "A_AC3", 5) == 0) {
+	      track->mimeType = "audio/AC3";
+	    } else if (strncmp(codecID, "A_VORBIS", 8) == 0) {
+	      track->mimeType = "audio/VORBIS";
+	    } else if (strcmp(codecID, "V_MPEG4/ISO/AVC") == 0) {
+	      track->mimeType = "video/H264";
+	    } else if (strcmp(codecID, "V_MPEGH/ISO/HEVC") == 0) {
+	      track->mimeType = "video/H265";
+	    } else if (strncmp(codecID, "V_VP8", 5) == 0) {
+	      track->mimeType = "video/VP8";
+	    } else if (strncmp(codecID, "V_THEORA", 8) == 0) {
+	      track->mimeType = "video/THEORA";
+	    } else if (strncmp(codecID, "S_TEXT", 6) == 0) {
+	      track->mimeType = "text/T140";
+	    }
 	  } else {
 	    delete[] codecID;
 	  }
@@ -453,11 +474,34 @@ Boolean MatroskaFileParser::parseTrack() {
 	    delete[] track->codecPrivate; track->codecPrivate = codecPrivate;
 	    track->codecPrivateSize = codecPrivateSize;
 
-	    // Hack for H.264: Byte 4 of the 'codec private' data contains
+	    // Hack for H.264 and H.265: The 'codec private' data contains
 	    // the size of NAL unit lengths:
-	    if (track->codecID != NULL && strcmp(track->codecID, "V_MPEG4/ISO/AVC") == 0
-		&& codecPrivateSize >= 5) {
-	      track->subframeSizeSize = (codecPrivate[4])&0x3 + 1;
+	    if (track->codecID != NULL) {
+	      if (strcmp(track->codecID, "V_MPEG4/ISO/AVC") == 0) { // H.264
+		// Byte 4 of the 'codec private' data contains 'lengthSizeMinusOne':
+		if (codecPrivateSize >= 5) track->subframeSizeSize = (codecPrivate[4])&0x3 + 1;
+	      } else if (strcmp(track->codecID, "V_MPEGH/ISO/HEVC") == 0) { // H.265
+		// H.265 'codec private' data is *supposed* to use the format that's described in
+		// http://lists.matroska.org/pipermail/matroska-devel/2013-September/004567.html
+		// However, some Matroska files use the same format that was used for H.264.
+		// We check for this here, by checking various fields that are supposed to be
+		// 'all-1' in the 'correct' format:
+		if (codecPrivateSize < 23 || (codecPrivate[13]&0xF0) != 0xF0 ||
+		    (codecPrivate[15]&0xFC) != 0xFC || (codecPrivate[16]&0xFC) != 0xFC ||
+		    (codecPrivate[17]&0xF8) != 0xF8 || (codecPrivate[18]&0xF8) != 0xF8) {
+		  // The 'correct' format isn't being used, so assume the H.264 format instead:
+		  track->codecPrivateUsesH264FormatForH265 = True;
+		  
+		  // Byte 4 of the 'codec private' data contains 'lengthSizeMinusOne':
+		  if (codecPrivateSize >= 5) track->subframeSizeSize = (codecPrivate[4])&0x3 + 1;
+		} else {
+		  // This looks like the 'correct' format:
+		  track->codecPrivateUsesH264FormatForH265 = False;
+
+		  // Byte 21 of the 'codec private' data contains 'lengthSizeMinusOne':
+		  track->subframeSizeSize = (codecPrivate[21])&0x3 + 1;
+		}
+	      }
 	    }
 	  } else {
 	    delete[] codecPrivate;
